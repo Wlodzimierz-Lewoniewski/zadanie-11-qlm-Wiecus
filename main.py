@@ -1,46 +1,49 @@
 import math
 from collections import Counter
 
-def preprocess_text(text):
-    """Normalizes text to lowercase and tokenizes it by spaces."""
+
+def tokenize(text):
+    """Converts text to lowercase and splits into words without punctuation."""
     return text.lower().replace('.', '').split()
 
-def calculate_smoothed_probability(word, doc_freq, doc_size, corpus_freq, corpus_size, alpha):
-    prob_in_doc = doc_freq[word] / doc_size if doc_size > 0 else 0
-    prob_in_corpus = corpus_freq[word] / corpus_size if corpus_size > 0 else 0
-    return alpha * prob_in_doc + (1 - alpha) * prob_in_corpus
 
-def compute_log_score(doc_tokens, query_tokens, corpus_freq, corpus_size, alpha):
-    doc_freq = Counter(doc_tokens)
-    doc_size = len(doc_tokens)
-    
-    log_score = sum(
-        math.log(calculate_smoothed_probability(word, doc_freq, doc_size, corpus_freq, corpus_size, alpha))
-        for word in query_tokens
-        if calculate_smoothed_probability(word, doc_freq, doc_size, corpus_freq, corpus_size, alpha) > 0
-    )
-    return log_score
+def compute_document_scores(documents, query, smoothing=0.5):
+    query_tokens = tokenize(query)
+    tokenized_docs = [tokenize(doc) for doc in documents]
 
-def rank_documents(docs, query, alpha=0.5):
-    query_tokens = preprocess_text(query)
-    tokenized_docs = list(map(preprocess_text, docs))
-    
-    corpus_tokens = [token for doc in tokenized_docs for token in doc]
+    # Flatten the corpus and calculate word frequencies
+    corpus_tokens = [word for doc in tokenized_docs for word in doc]
     corpus_freq = Counter(corpus_tokens)
     corpus_size = len(corpus_tokens)
-    
-    scored_docs = [
-        (idx, compute_log_score(doc, query_tokens, corpus_freq, corpus_size, alpha))
-        for idx, doc in enumerate(tokenized_docs)
-    ]
-    
-    ranked_docs = sorted(scored_docs, key=lambda item: (-item[1], item[0]))
-    return [idx for idx, _ in ranked_docs]
+
+    scores = []
+
+    for doc_index, doc_tokens in enumerate(tokenized_docs):
+        doc_freq = Counter(doc_tokens)
+        doc_size = len(doc_tokens)
+
+        log_probability = 0
+
+        for word in query_tokens:
+            prob_word_doc = doc_freq[word] / doc_size if doc_size > 0 else 0
+            prob_word_corpus = corpus_freq[word] / corpus_size if corpus_size > 0 else 0
+            smoothed_prob = smoothing * prob_word_doc + (1 - smoothing) * prob_word_corpus
+
+            if smoothed_prob > 0:
+                log_probability += math.log(smoothed_prob)
+
+        scores.append((doc_index, log_probability))
+
+    # Sort by log probability descending, then by index ascending
+    scores.sort(key=lambda item: (-item[1], item[0]))
+
+    return [index for index, _ in scores]
+
 
 if __name__ == "__main__":
-    doc_count = int(input("Enter number of documents: "))
-    documents = [input("Document {}: ".format(i + 1)).strip() for i in range(doc_count)]
-    search_term = input("Enter search query: ").strip()
-    
-    result_indices = rank_documents(documents, search_term)
-    print(result_indices)
+    num_docs = int(input())
+    docs = [input().strip() for _ in range(num_docs)]
+    search_query = input().strip()
+
+    ranked_indices = compute_document_scores(docs, search_query)
+    print(ranked_indices)
